@@ -1,0 +1,88 @@
+import pandas as pd
+import numpy as np
+import cvxopt
+import matplotlib.pyplot as plt
+
+features_csv = pd.read_csv('svm_data.csv', names=['x1', 'x2'])
+labels_csv = pd.read_csv('svm_labels.csv', names=['y'])
+
+features = np.array((list(zip(features_csv['x1'], features_csv['x2']))))
+labels = np.array((labels_csv['y'].as_matrix()))
+
+C = 1
+
+samples_size = features.shape[0]
+number_of_features = features.shape[1]
+
+diagY = np.diag(labels)
+Q = np.dot(np.dot(diagY, np.dot(features, features.T)), diagY)
+c = np.ones(samples_size) * -1
+Aeq = labels.reshape(1, 200)
+beq = 0.0
+
+A = np.vstack((np.diag(np.ones(samples_size) * -1), np.diag(np.ones(samples_size))))
+b = np.hstack((np.zeros(samples_size), np.ones(samples_size) * C))
+
+# Convert to cvxopt matrices with cvxopt naming convention
+P = cvxopt.matrix(Q, tc='d')
+q = cvxopt.matrix(c, tc='d')
+G = cvxopt.matrix(A, tc='d')
+h = cvxopt.matrix(b, tc='d')
+A = cvxopt.matrix(Aeq, tc='d')
+b = cvxopt.matrix(beq, tc='d')
+
+result = cvxopt.solvers.qp(P, q, G, h, A, b)
+alphas = np.ravel(result['x'])
+is_sv = alphas > 1e-5
+alphas = alphas[is_sv]
+
+sv_features = features[is_sv]
+sv_labels = labels[is_sv]
+
+w = np.zeros(2)
+for sv_index in range(len(alphas)):
+    w += alphas[sv_index] * sv_labels[sv_index] * sv_features[sv_index]
+
+# For b average over all support vectors with formula b = y - wx
+b = 0
+for sv_index in range(len(alphas)):
+    b += sv_labels[sv_index]
+    b -= np.dot(w, sv_features[sv_index])
+b /= len(alphas)
+
+# Draw plot
+slope = -w[0] / w[1]
+intercept = -b / w[1]
+
+x_vals = []
+y_vals = []
+for feature in features:
+    x_vals.append(feature[0])
+    y_vals.append(feature[1])
+
+colors = []
+for value in labels:
+    if value == 1:
+        colors.append('blue')
+    else:
+        colors.append('red')
+
+x = np.array([value for value in range(-4, 10)])
+y = np.array(y_vals)
+plt.scatter(x_vals, y_vals, c=colors)
+plt.xlim(-5, 10)
+plt.ylim(-5, 10)
+plt.plot(x, x * slope + intercept, 'k-')
+
+# Draw margins
+intercept_for_upper_margin = intercept - w[0]
+intercept_for_lower_margin = intercept + w[0]
+plt.plot(x, x * slope + intercept_for_upper_margin, 'k--')
+plt.plot(x, x * slope + intercept_for_lower_margin, 'k--')
+plt.savefig('visualisation')
+plt.show()
+
+
+
+
+
